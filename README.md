@@ -1,4 +1,19 @@
 downloadboob
 ============
 
-Added in a cron, this script  download periodically all the show you want
+This script can be used to automatically download videos matching some criteria.
+
+To avoid to download a video twice, all videos are stored in an unique way : .files/<backend name>/<video.id>.avi
+
+For each entry in the configuration file, the script :
+- check for new video
+- download the new videos
+- create a link from <user specify name>/<video.name>.avi to .files/<backend name>/<video id>.avi
+
+In each section of the configuration file :
+- backend : the backend to use
+- pattern : specify the search pattern
+- title_exclude : a pipe seperated list. If an item in this list is substring of the title, then the video is ignored.
+- id_regexp : an optional regular expression that the video id must match
+- max_results : maximum number of result to parse
+- directory : the <user specify name> above.
