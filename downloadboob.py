@@ -31,8 +31,12 @@ from weboob.core import Weboob
 from weboob.capabilities.base import NotLoadedType
 from weboob.capabilities.video import CapVideo,BaseVideo
 
-from subprocess import Popen, check_output
+from subprocess import Popen, check_output,call,CalledProcessError
 from datetime import datetime,timedelta
+
+from multiprocessing import Pool,Process,Queue,cpu_count
+from Queue import Empty
+
 
 # hack to workaround bash redirection and encoding problem
 import sys
@@ -58,30 +62,28 @@ def write_file(f,string):
     f.write(string.encode('utf8'))
 
 def check_backend(backend_name):
-    output = check_output(['videoob', "backend","list"], env={"PYTHONIOENCODING": "UTF-8"}).decode('utf8')
+    output = check_output(['videoob', "backend","list"],stderr=devnull,shell=False, env={"PYTHONIOENCODING": "UTF-8"}).decode('utf8')
     list_backend = output.splitlines()[0].split(": ")[1].split(", ")
     if backend_name in list_backend:
         return True
     else:
-        output = check_output(["videoob","backend","list-modules"], env={"PYTHONIOENCODING": "UTF-8"}).decode('utf8')
+        output = check_output(["videoob","backend","list-modules"],stderr=devnull,shell=False, env={"PYTHONIOENCODING": "UTF-8"}).decode('utf8')
         list_backend=[]
         for line in output.splitlines():
           if not matched(line,"Modules list:"):
             list_backend.append(line.split("] ")[1].split(" ")[0])
         if backend_name in list_backend:
-            p=Popen(["videoob","backend","add",backend_name])
+            p=Popen(["videoob","backend","add",backend_name],stderr=devnull,stdout=devnull,shell=False)
             return p.wait() == 0
         else:
             return False
 
 DOWNLOAD_DIRECTORY=".files"
+devnull=open('/dev/null', 'w')
 
 def check_exec(executable):
-    with open('/dev/null', 'w') as devnull:
-        process = subprocess.Popen(['which', executable], stdout=devnull)
-        if process.wait() != 0:
-            print('Please install "%s"' % executable, file=sys.stderr)
-            return False
+    if call(['which', executable],stderr=devnull,stdout=devnull,shell=False) != 0:
+        return False
     return True
 
 def matched(string, regexp):
@@ -91,7 +93,7 @@ def matched(string, regexp):
 
 class Downloadboob(object):
 
-    def __init__(self, backend_name, download_directory, links_directory):
+    def __init__(self, name,backend_name, download_directory, links_directory):
         self.download_directory = download_directory
         self.links_directory = links_directory
         self.backend_name = backend_name
@@ -99,6 +101,7 @@ class Downloadboob(object):
         self.weboob = Weboob()
         self.weboob.load_backends(modules=[self.backend_name])
         self.backend=self.weboob.get_backend(self.backend_name)
+        self.name = name
 
     def check_link(self, link_name):
         if os.path.islink(link_name):
@@ -179,26 +182,28 @@ class Downloadboob(object):
 #        if (isinstance(video.id    , NotLoadedType)) or \
 #           (isinstance(video.title , NotLoadedType)) or \
 #           (isinstance(video.author, NotLoadedType)):
-          output = check_output(['videoob', "info",video.id+"@"+self.backend.name], env={"PYTHONIOENCODING": "UTF-8"}).decode('utf8')
-          for line in output.splitlines():
-             prefix=line.split(": ")[0]
-             suffix=line[len(prefix)+2:]
-             if matched(prefix,"ext"):
-                video.ext=suffix
-             elif matched(prefix,"title"):
-                video.title=suffix
-             elif matched(prefix,"description"):
-                video.description=suffix
-             elif matched(prefix,"url"):
-                video.url=suffix
-             elif matched(prefix,"author"):
-                video.author=suffix
-             elif matched(prefix,"duration"):
-                t=datetime.strptime(suffix,"%H:%M:%S")
-                video.duration=timedelta(hours=t.hour, minutes=t.minute, seconds=t.second)
-             elif matched(prefix,"date"):
-                video.date=datetime.strptime(suffix,"%Y-%m-%d %H:%M:%S")
-
+        try:
+            output = check_output(['videoob', "info",video.id+"@"+self.backend.name],stderr=devnull,shell=False, env={"PYTHONIOENCODING": "UTF-8"}).decode('utf8')
+            for line in output.splitlines():
+                prefix=line.split(": ")[0]
+                suffix=line[len(prefix)+2:]
+                if matched(prefix,"ext"):
+                    video.ext=suffix
+                elif matched(prefix,"title"):
+                    video.title=suffix
+                elif matched(prefix,"description"):
+                    video.description=suffix
+                elif matched(prefix,"url"):
+                    video.url=suffix
+                elif matched(prefix,"author"):
+                    video.author=suffix
+                elif matched(prefix,"duration"):
+                    t=datetime.strptime(suffix,"%H:%M:%S")
+                    video.duration=timedelta(hours=t.hour, minutes=t.minute, seconds=t.second)
+                elif matched(prefix,"date") and suffix:
+                    video.date=datetime.strptime(suffix,"%Y-%m-%d %H:%M:%S")
+        except CalledProcessError:
+            self.backend.fill_video(video, ('ext','title', 'url', 'duration', 'author', 'date', 'description')) # BUGGY FOR ARTE
     def purge(self):
         #remove link if file have been removed
         if not os.path.isdir(self.links_directory):
@@ -264,10 +269,10 @@ class Downloadboob(object):
                     if self.is_ok(video,title_regexp,id_regexp,author_regexp,title_exclude):
                         i+=1
                         if not self.is_downloaded(video):
-                            print("  %s\n    Description:%s\n    Author:%s\n    Id:%s\n    Duration:%s\n    Date:%s" % (video.title,video.description,video.author, video.id, video.duration, video.date))
+#                            print("  %s\n    Description:%s\n    Author:%s\n    Id:%s\n    Duration:%s\n    Date:%s" % (video.title,video.description,video.author, video.id, video.duration, video.date))
                             videos.append(video)
-                        else:
-                            print("Already downloaded, check %s" % video.id)
+#                        else:
+#                            print("Already downloaded, check %s" % video.id)
                         if i == max_results:
                             break
         return videos
@@ -297,20 +302,23 @@ class Downloadboob(object):
         dest = self.get_filename(video)
         if video.url.startswith('rtmp'):
             if not check_exec('rtmpdump'):
+                print('I Need rtmpdump')
                 return 1
             args = ('rtmpdump', '-e', '-r', video.url, '-o', dest)
         elif video.url.startswith('mms'):
             if not check_exec('mimms'):
+                print('I Need mimms')
                 return 1
             args = ('mimms', video.url, dest)
         else:
             if not check_exec('curl'):
                 if not check_exec('wget'):
+                    print('I Need curl or wget')
                     return 1
                 else:
-                    args = ('wget', video.url, '-O', dest)
+                    args = ('wget','-q', video.url, '-O', dest)
             else:
-                args = ('curl', video.url, '-o', dest)
+                args = ('curl','-s', video.url, '-o', dest)
         return os.spawnlp(os.P_WAIT, args[0], *args)       
 
     def do_conv(self, video):
@@ -320,9 +328,10 @@ class Downloadboob(object):
            dest = self.get_filename(video)
            if not check_exec('avconv'):
               if not check_exec('ffmpeg'):
+                 print('I Need avconv or ffmpeg')
                  return 1
               else:
-                 args = ('ffmpeg','-i', video.url, '-vcodec','copy','-acodec','copy','-threads', '8', dest)
+                 args = ('ffmpeg','-i', video.url, '-vcodec','copy','-acodec','copy','-threads', '8','-loglevel','error', dest) #"-stat"
            else:
               args = ('avconv','-i', video.url, '-c','copy', dest)
            return os.spawnlp(os.P_WAIT, args[0], *args)
@@ -349,33 +358,32 @@ class Downloadboob(object):
     def write_nfo(self, video):
         nfoname, _ = os.path.splitext(self.get_linkname(video))
         nfoname = nfoname+".nfo"
-#        if not os.path.isfile(nfoname):
-        Show_name = self.links_directory.split("/")[-1]
-        print("  create %s" % nfoname)
-        f=open(nfoname,'w')
-        write_file(f,"<episodedetails>\n")
-        write_file(f,"  <title>"+video.title+"</title>\n")
-        write_file(f,"  <showtitle>"+Show_name+"</showtitle>\n")
-        write_file(f,"  <season>0</season>\n")
-        write_file(f,"  <episode>0</episode>\n")
-        if video.date:
-              write_file(f,"  <aired>"+video.date.strftime("%y/%m/%d")+"</aired>\n")
-        if video.duration:
-              write_file(f,"  <runtime>"+str(int(video.duration.total_seconds()/60))+"</runtime>\n")
-        if video.author:
-              write_file(f,"  <studio>"+video.author+"</studio>\n")
-        else:
-              write_file(f,"  <studio>"+self.backend_name+"</studio>\n")
-        if video.description:
-              write_file(f,"  <plot>"+video.description+"</plot>\n")
-        write_file(f,"  <displayseason />\n")
-        write_file(f,"  <displayepisode />\n")
-        write_file(f,"</episodedetails>\n")
-        f.close()
+        if not os.path.isfile(nfoname):
+            Show_name = self.links_directory.split("/")[-1]
+            print("  create %s" % nfoname)
+            f=open(nfoname,'w')
+            write_file(f,"<episodedetails>\n")
+            write_file(f,"  <title>"+video.title+"</title>\n")
+            write_file(f,"  <showtitle>"+Show_name+"</showtitle>\n")
+            write_file(f,"  <season>0</season>\n")
+            write_file(f,"  <episode>0</episode>\n")
+            if video.date:
+                  write_file(f,"  <aired>"+video.date.strftime("%y/%m/%d")+"</aired>\n")
+            if video.duration:
+                  write_file(f,"  <runtime>"+str(int(video.duration.total_seconds()/60))+"</runtime>\n")
+            if video.author:
+                  write_file(f,"  <studio>"+video.author+"</studio>\n")
+            else:
+                  write_file(f,"  <studio>"+self.backend_name+"</studio>\n")
+            if video.description:
+                  write_file(f,"  <plot>"+video.description+"</plot>\n")
+            write_file(f,"  <displayseason />\n")
+            write_file(f,"  <displayepisode />\n")
+            write_file(f,"</episodedetails>\n")
+            f.close()
 
     def download(self, pattern=None, sortby=CapVideo.SEARCH_RELEVANCE, nsfw=False, max_results=50, title_regexp=None, id_regexp=None, \
                  pattern_type="search",author_regexp=None,title_exclude=None):
-        print("For backend %s, search for '%s'" % (backend_name, pattern))
 
         # create directory for links
         self.init_dir()
@@ -388,8 +396,8 @@ class Downloadboob(object):
 
         # download videos
         if videos:
-            print("Downloading...")
             for video in videos:
+                print("Downloading..."+video.title)
                 if kodi:                            # THE "TITLE" BECOME "S00E00 - TITLE (ID)"
                     self.rewrite_title(video)
                 if down_live:                       # CREATE LIVE STREAM
@@ -404,6 +412,58 @@ class Downloadboob(object):
                         self.do_mv(video)           # MOVE FILES FOR A BEAUTIFULL LIBRARY
                         self.write_nfo(video)       # CREATE NFO FILES FOR KODI
 
+
+
+
+nproc=cpu_count()
+def do_work(q,r):
+  while True:
+    try:
+        section=q.get(block=False)
+        backend_name=config.get(section, "backend").decode('utf8')
+        if check_backend(backend_name):
+          pattern=config.get(section, "pattern").decode('utf8')
+          section_sublinks_directory=config.get(section,"directory").decode('utf8')
+          if config.has_option(section, "type"):
+              pattern_type=config.get(section, "type").decode('utf8')
+          else:
+              pattern_type="search"
+          if config.has_option(section, "title_regexp"):
+              title_regexp=config.get(section, "title_regexp").decode('utf8')
+          else:
+              title_regexp=None
+          if config.has_option(section, "title_exclude"):
+              title_exclude=config.get(section, "title_exclude").decode('utf8')
+          else:
+              title_exclude=None
+          if config.has_option(section, "id_regexp"):
+              id_regexp=config.get(section, "id_regexp").decode('utf8')
+          else:
+              id_regexp=None
+          if config.has_option(section, "author_regexp"):
+              author_regexp=config.get(section, "author_regexp").decode('utf8')
+          else:
+              author_regexp=None
+          if config.has_option(section, "max_results"):
+              max_result=config.getint(section, "max_results")
+          else:
+              max_result=2
+          section_links_directory=os.path.join(links_directory, section_sublinks_directory)
+
+          downloadboob = Downloadboob(section,backend_name, download_directory, section_links_directory)
+          downloadboob.purge()
+
+          print("For backend %s, start search for '%s'" % (backend_name,section))
+          downloadboob.download(pattern, CapVideo.SEARCH_DATE, False, max_result, title_regexp, id_regexp,pattern_type,author_regexp,title_exclude)
+          if matched(pattern_type,"search"):
+              # FIXME (AT LEAST) FOR YOUTUBE
+              downloadboob.download(pattern, CapVideo.SEARCH_RELEVANCE, False, max_result, title_regexp, id_regexp,pattern_type,author_regexp,title_exclude)
+          print("For backend %s, end search for '%s'" % (backend_name,section))
+        else:
+          print(backend_name+" unknown")
+    except Empty:
+      if q.empty():
+        break
 
 if not check_exec('videoob'):
     exit(1)
@@ -436,72 +496,24 @@ if config.has_option("main", "backend_directory"):
 else:
     backend_directory=os.path.expanduser("~/.local/share/weboob/modules/1.0/")
 
+print("Backends update")
 Popen(["weboob-config","update"]).wait()
 
-for section in config.sections():
+
+if __name__ == '__main__':
+  work_queue=Queue()
+  res_queue=Queue()
+  for section in config.sections():
     if section != "main":
-        backend_name=config.get(section, "backend").decode('utf8')
-        if check_backend(backend_name):
-          pattern=config.get(section, "pattern").decode('utf8')
-          section_sublinks_directory=config.get(section,"directory").decode('utf8')
-          if config.has_option(section, "type"):
-              pattern_type=config.get(section, "type").decode('utf8')
-          else:
-              pattern_type="search"
-          if config.has_option(section, "title_regexp"):
-              title_regexp=config.get(section, "title_regexp").decode('utf8')
-          else:
-              title_regexp=None
-          if config.has_option(section, "title_exclude"):
-              title_exclude=config.get(section, "title_exclude").decode('utf8')
-          else:
-              title_exclude=None
-          if config.has_option(section, "id_regexp"):
-              id_regexp=config.get(section, "id_regexp").decode('utf8')
-          else:
-              id_regexp=None
-          if config.has_option(section, "author_regexp"):
-              author_regexp=config.get(section, "author_regexp").decode('utf8')
-          else:
-              author_regexp=None
-          if config.has_option(section, "max_results"):
-              max_result=config.getint(section, "max_results")
-          else:
-              max_result=50
-          section_links_directory=os.path.join(links_directory, section_sublinks_directory)
-
-          downloadboob = Downloadboob(backend_name, download_directory, section_links_directory)
-          downloadboob.purge()
-
-          downloadboob.download(pattern, CapVideo.SEARCH_DATE, False, max_result, title_regexp, id_regexp,pattern_type,author_regexp,title_exclude)
-          if matched(pattern_type,"search"):
-              # FIXME (AT LEAST) FOR YOUTUBE
-              downloadboob.download(pattern, CapVideo.SEARCH_RELEVANCE, False, max_result, title_regexp, id_regexp,pattern_type,author_regexp,title_exclude)
-        else:
-          print(backend_name+" unknown")
+      work_queue.put(section)
+  processes = [Process(target=do_work,args=(work_queue,res_queue,)) for i in range(nproc)]
+  for p in processes:
+    p.start()
+  for p in processes:
+    p.join()
 
 
-
-
-
-
-
-
-
-
-
-##############################################################
-################ TODO ########################################
-##############################################################
-# Refactorize
-# PARALELLIZE
-## SPLIT download in get_list + down_list
-## worker take in down list
-## if embty then in downloadboob_list
-##############################################################
-################ TODO ########################################
-##############################################################
-
+exit(0)
 
 
 

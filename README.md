@@ -26,11 +26,15 @@ If kodi is asked then
 Dependencies
 ------------
 
-- Linux
-- ffmpeg or avconv
-- curl or wget
-- weboob
-- python2
+- Mandatory
+    - Linux
+    - python2
+    - weboob
+- Optionnal
+    - curl or wget
+    - ffmpeg or avconv
+    - rtmpdump
+    - mimms
 
 Installation
 ------------
@@ -105,7 +109,6 @@ Future
 ------
 
 - Refactorization
-- Parallelization
 - Rss ?
 - Podcasts ?
 
