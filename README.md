@@ -7,6 +7,8 @@ Purpose
 -------
 
 For each entry in the configuration file, the script :
+- update backends
+- install necessary backends
 - check for new video
 - download the new videos
 - Store the video in root_directory/entry_directory/video.name.avi
@@ -23,18 +25,21 @@ If kodi is asked then
 
 Dependencies
 ------------
+
 - Linux
 - ffmpeg or avconv
 - curl or wget
 - weboob
-- have installed the backends you want to use :
-   - videoob backend list-modules : gives the list of available backends
-   - videoob backend add backend_name : install the backend backen_name
-- A configuration file :
+- python2
+
+Installation
+------------
+
+- Put the script wherever you want
+- Fill at least one of those configuration file :
    - /etc/downloadboob.conf
    - ~/downloadboob.conf
    - ./downloadboob.conf
-
 
 Parameters
 ----------
@@ -55,6 +60,9 @@ The main parameters are
   </tr>
   <tr>
     <td>kodi         </td><td>Boolean</td><td>False        </td><td>Do you want to integrate your library in kodi (formerly XBMC) ?</td>
+  </tr>
+  <tr>
+    <td>backend_directory</td><td>String</td><td>~/.local/share/weboob/modules/1.0/        </td><td>Path to the weboob modules.</td>
   </tr>
 </table> 
 

@@ -31,7 +31,7 @@ from weboob.core import Weboob
 from weboob.capabilities.base import NotLoadedType
 from weboob.capabilities.video import CapVideo,BaseVideo
 
-from subprocess import Popen, PIPE
+from subprocess import Popen, check_output
 from datetime import datetime,timedelta
 
 # hack to workaround bash redirection and encoding problem
@@ -46,7 +46,6 @@ if sys.stdout.encoding is None:
         # sw will encode Unicode data to the locale-specific character set.
         sys.stdout = sw(sys.stdout)
 # end of hack
-backend_directory=".local/share/weboob/modules/1.0/"
 
 def removeNonAscii(s): return "".join(i for i in s if ord(i)<128)
 
@@ -58,6 +57,23 @@ def removeSpecial(s):
 def write_file(f,string):
     f.write(string.encode('utf8'))
 
+def check_backend(backend_name):
+    output = check_output(['videoob', "backend","list"], env={"PYTHONIOENCODING": "UTF-8"}).decode('utf8')
+    list_backend = output.splitlines()[0].split(": ")[1].split(", ")
+    if backend_name in list_backend:
+        return True
+    else:
+        output = check_output(["videoob","backend","list-modules"], env={"PYTHONIOENCODING": "UTF-8"}).decode('utf8')
+        list_backend=[]
+        for line in output.splitlines():
+          if not matched(line,"Modules list:"):
+            list_backend.append(line.split("] ")[1].split(" ")[0])
+        if backend_name in list_backend:
+            p=Popen(["videoob","backend","add",backend_name])
+            return p.wait() == 0
+        else:
+            return False
+
 DOWNLOAD_DIRECTORY=".files"
 
 def check_exec(executable):
@@ -67,6 +83,11 @@ def check_exec(executable):
             print('Please install "%s"' % executable, file=sys.stderr)
             return False
     return True
+
+def matched(string, regexp):
+    if regexp and string:
+        return re.search(regexp, string) is not None
+    return None
 
 class Downloadboob(object):
 
@@ -89,11 +110,6 @@ class Downloadboob(object):
         else:
             return True
 
-    def matched(self, string, regexp):
-        if regexp:
-            return re.search(regexp, string) is not None
-        return True
-
     def is_downloaded(self, video):
         if os.path.isfile(self.get_filename(video)) or os.path.isfile(self.get_filename(video,m3u=True)):
            return True
@@ -101,15 +117,15 @@ class Downloadboob(object):
            return False
 
     def is_ok(self,video,title_regexp,id_regexp,author_regexp,title_exclude):
-        if video.title and title_regexp and not(self.matched(video.title,title_regexp)):
+        if matched(video.title,title_regexp) == False:
             return False
-        if video.id and id_regexp and not(self.matched(video.id,id_regexp)):
+        if matched(video.id,id_regexp) == False:
             return False
-        if video.author and author_regexp and not(self.matched(video.author,author_regexp)):
+        if matched(video.author,author_regexp) == False:
             return False
-        if video.title and title_exclude and self.matched(video.title,title_exclude):
+        if matched(video.title,title_exclude) == True:
             return False
-        if video.description and title_exclude and self.matched(video.description,title_exclude):
+        if matched(video.description,title_exclude) == True:
             return False
         return True
 
@@ -163,25 +179,24 @@ class Downloadboob(object):
 #        if (isinstance(video.id    , NotLoadedType)) or \
 #           (isinstance(video.title , NotLoadedType)) or \
 #           (isinstance(video.author, NotLoadedType)):
-          p = Popen(['videoob', "info",video.id+"@"+self.backend.name], stdin=PIPE, stdout=PIPE, stderr=PIPE)
-          output, err = p.communicate()
-          for line in output.decode('utf8').splitlines():
+          output = check_output(['videoob', "info",video.id+"@"+self.backend.name], env={"PYTHONIOENCODING": "UTF-8"}).decode('utf8')
+          for line in output.splitlines():
              prefix=line.split(": ")[0]
              suffix=line[len(prefix)+2:]
-             if re.match("ext",prefix):
+             if matched(prefix,"ext"):
                 video.ext=suffix
-             elif re.match("title",prefix):
+             elif matched(prefix,"title"):
                 video.title=suffix
-             elif re.match("description",prefix):
+             elif matched(prefix,"description"):
                 video.description=suffix
-             elif re.match("url",prefix):
+             elif matched(prefix,"url"):
                 video.url=suffix
-             elif re.match("author",prefix):
+             elif matched(prefix,"author"):
                 video.author=suffix
-             elif re.match("duration",prefix):
+             elif matched(prefix,"duration"):
                 t=datetime.strptime(suffix,"%H:%M:%S")
                 video.duration=timedelta(hours=t.hour, minutes=t.minute, seconds=t.second)
-             elif re.match("date",prefix):
+             elif matched(prefix,"date"):
                 video.date=datetime.strptime(suffix,"%Y-%m-%d %H:%M:%S")
 
     def purge(self):
@@ -213,24 +228,24 @@ class Downloadboob(object):
 
     def do_search(self, pattern=None,pattern_type="search", sortby=CapVideo.SEARCH_RELEVANCE, nsfw=False):
         list_videos=[]
-        if re.match("search",pattern_type):
+        if matched(pattern_type,"search"):
             list_videos=self.backend.search_videos(pattern, sortby, nsfw)
-        elif re.match("ls",pattern_type):
+        elif matched(pattern_type,"ls"):
             for id in self.videoob_list_rep(pattern,self.backend.name):
                 sys.path.insert(0,backend_directory+"/"+self.backend.name+"/" ) # HACK
                 if 'video' in sys.modules:
                    del sys.modules['video']
-                if re.match("arte",self.backend.name):
+                if matched(self.backend.name,"arte"):
                    from video import ArteVideo as video_init
-                elif re.match("canalplus",self.backend.name):
+                elif matched(self.backend.name,"canalplus"):
                    from video import CanalplusVideo as video_init
-                elif re.match("arretsurimages",self.backend.name):
+                elif matched(self.backend.name,"arretsurimages"):
                    from video import ArretSurImagesVideo as video_init
-                elif re.match("dailymotion",self.backend.name):
+                elif matched(self.backend.name,"dailymotion"):
                    from video import DailymotionVideo as video_init
-                elif re.match("nolifetv",self.backend.name):
+                elif matched(self.backend.name,"nolifetv"):
                    from video import NolifeTVVideo as video_init
-                elif re.match("youtube",self.backend.name):
+                elif matched(self.backend.name,"youtube"):
                    from video import YoutubeVideo as video_init
                 list_videos.append(video_init(id))
         return list_videos
@@ -258,10 +273,10 @@ class Downloadboob(object):
         return videos
 
     def write_m3u(self, video):
-        if video.ext and re.match("m3u",video.ext):
+        if matched(video.ext,"m3u"):
             return self.do_download(video,conv=False)
         else:
-            if self.matched(video.url,"\.m3u"):
+            if matched(video.url,"\.m3u"):
                 return self.do_download(video,conv=False)
             else:
                 dest = self.get_filename(video,m3u=True)
@@ -300,7 +315,7 @@ class Downloadboob(object):
 
     def do_conv(self, video):
         dest = self.get_filename(video)
-        if re.match("m3u",str(video.ext)):
+        if matched(str(video.ext),"m3u"):
            video.ext='avi'
            dest = self.get_filename(video)
            if not check_exec('avconv'):
@@ -390,7 +405,6 @@ class Downloadboob(object):
                         self.write_nfo(video)       # CREATE NFO FILES FOR KODI
 
 
-
 if not check_exec('videoob'):
     exit(1)
 
@@ -417,45 +431,54 @@ if config.has_option("main", "kodi"):
 else:
     kodi=False
 
+if config.has_option("main", "backend_directory"):
+    backend_directory=os.path.expanduser(config.get("main", "backend_directory").decode('utf8'))
+else:
+    backend_directory=os.path.expanduser("~/.local/share/weboob/modules/1.0/")
+
+Popen(["weboob-config","update"]).wait()
+
 for section in config.sections():
     if section != "main":
         backend_name=config.get(section, "backend").decode('utf8')
-        pattern=config.get(section, "pattern").decode('utf8')
-        section_sublinks_directory=config.get(section,"directory").decode('utf8')
-        if config.has_option(section, "type"):
-            pattern_type=config.get(section, "type").decode('utf8')
-        else:
-            pattern_type="search"
-        if config.has_option(section, "title_regexp"):
-            title_regexp=config.get(section, "title_regexp").decode('utf8')
-        else:
-            title_regexp=None
-        if config.has_option(section, "title_exclude"):
-            title_exclude=config.get(section, "title_exclude").decode('utf8')
-        else:
-            title_exclude=None
-        if config.has_option(section, "id_regexp"):
-            id_regexp=config.get(section, "id_regexp").decode('utf8')
-        else:
-            id_regexp=None
-        if config.has_option(section, "author_regexp"):
-            author_regexp=config.get(section, "author_regexp").decode('utf8')
-        else:
-            author_regexp=None
-        if config.has_option(section, "max_results"):
-            max_result=config.getint(section, "max_results")
-        else:
-            max_result=50
-        section_links_directory=os.path.join(links_directory, section_sublinks_directory)
+        if check_backend(backend_name):
+          pattern=config.get(section, "pattern").decode('utf8')
+          section_sublinks_directory=config.get(section,"directory").decode('utf8')
+          if config.has_option(section, "type"):
+              pattern_type=config.get(section, "type").decode('utf8')
+          else:
+              pattern_type="search"
+          if config.has_option(section, "title_regexp"):
+              title_regexp=config.get(section, "title_regexp").decode('utf8')
+          else:
+              title_regexp=None
+          if config.has_option(section, "title_exclude"):
+              title_exclude=config.get(section, "title_exclude").decode('utf8')
+          else:
+              title_exclude=None
+          if config.has_option(section, "id_regexp"):
+              id_regexp=config.get(section, "id_regexp").decode('utf8')
+          else:
+              id_regexp=None
+          if config.has_option(section, "author_regexp"):
+              author_regexp=config.get(section, "author_regexp").decode('utf8')
+          else:
+              author_regexp=None
+          if config.has_option(section, "max_results"):
+              max_result=config.getint(section, "max_results")
+          else:
+              max_result=50
+          section_links_directory=os.path.join(links_directory, section_sublinks_directory)
 
-        downloadboob = Downloadboob(backend_name, download_directory, section_links_directory)
-        downloadboob.purge()
+          downloadboob = Downloadboob(backend_name, download_directory, section_links_directory)
+          downloadboob.purge()
 
-        downloadboob.download(pattern, CapVideo.SEARCH_DATE, False, max_result, title_regexp, id_regexp,pattern_type,author_regexp,title_exclude)
-        if re.match("search",pattern_type):
-            # FIXME (AT LEAST) FOR YOUTUBE
-            downloadboob.download(pattern, CapVideo.SEARCH_RELEVANCE, False, max_result, title_regexp, id_regexp,pattern_type,author_regexp,title_exclude)
-
+          downloadboob.download(pattern, CapVideo.SEARCH_DATE, False, max_result, title_regexp, id_regexp,pattern_type,author_regexp,title_exclude)
+          if matched(pattern_type,"search"):
+              # FIXME (AT LEAST) FOR YOUTUBE
+              downloadboob.download(pattern, CapVideo.SEARCH_RELEVANCE, False, max_result, title_regexp, id_regexp,pattern_type,author_regexp,title_exclude)
+        else:
+          print(backend_name+" unknown")
 
 
 
