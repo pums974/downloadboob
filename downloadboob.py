@@ -185,7 +185,7 @@ class Downloadboob(object):
 
     def videoob_get_info(self,video): # THIS IS COSTLY
         try:
-            output = check_output(['videoob', "info",video.id+"@"+self.backend.name],stderr=stderr, env={"PYTHONIOENCODING": "UTF-8"}).decode('utf8')
+            output = check_output(['videoob', "info",'"'+video.id+"@"+self.backend.name+'"'],stderr=stderr, env={"PYTHONIOENCODING": "UTF-8"}).decode('utf8')
             for line in output.splitlines():
                 prefix=line.split(": ")[0]
                 suffix=line[len(prefix)+2:]
@@ -204,8 +204,13 @@ class Downloadboob(object):
                     video.duration=timedelta(hours=t.hour, minutes=t.minute, seconds=t.second)
                 elif matched(prefix,"date") and suffix:
                     video.date=datetime.strptime(suffix,"%Y-%m-%d %H:%M:%S")
-        except CalledProcessError:
-            self.backend.fill_video(video, ('ext','title', 'url', 'duration', 'author', 'date', 'description')) # BUGGY FOR ARTE
+        except CalledProcessError as test1:
+            print("videoob info %s failed : %s" % (video.id+"@"+self.backend.name,test1) ,file=stderr)
+            try:
+                self.backend.fill_video(video, ('ext','title', 'url', 'duration', 'author', 'date', 'description'))
+            except Exception as test2:
+                print("Impossible to find info about the video : %s" % test2,file=stderr)
+
 
     def purge(self):
         #remove link if target have been removed
@@ -467,7 +472,7 @@ def do_work(q,r):
           if config.has_option(section, "max_results"):
               max_result=config.getint(section, "max_results")
           else:
-              max_result=5
+              max_result=50
           section_links_directory=os.path.join(links_directory, section_sublinks_directory)
 
           downloadboob = Downloadboob(section,backend_name, download_directory, section_links_directory)
@@ -498,6 +503,9 @@ if not exec_videoob:
     print('I need videoob !')
     exit(1)
 
+print("Backends update",file=stdout)
+Popen(["weboob-config","update"],stdout=stdout,stderr=stderr).wait()
+
 config = ConfigParser.ConfigParser()
 config.read(['/etc/downloadboob.conf', os.path.expanduser('~/downloadboob.conf'), 'downloadboob.conf'])
 
@@ -525,9 +533,6 @@ if config.has_option("main", "backend_directory"):
     backend_directory=os.path.expanduser(config.get("main", "backend_directory").decode('utf8'))
 else:
     backend_directory=os.path.expanduser("~/.local/share/weboob/modules/1.0/")
-
-print("Backends update",file=stdout)
-Popen(["weboob-config","update"],stdout=stdout,stderr=stderr).wait()
 
 
 if __name__ == '__main__':
