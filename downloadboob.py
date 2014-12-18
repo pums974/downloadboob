@@ -209,6 +209,7 @@ class Downloadboob(object):
                 print("videoob info for %s failed : \n%s : %s" % (video.id+" - "+video.title,type(test1).__name__,test1 ) ,file=stderr)
             else:
                 print("videoob info for %s failed : \n%s : %s" % (video.id,type(test1).__name__,test1 ) ,file=stderr)
+            sys.stderr=stderr
             try:
                 self.backend.fill_video(video, ('ext','title', 'url', 'duration', 'author', 'date', 'description')) # This is incomplete for some backends
             except Exception as test2:
@@ -216,6 +217,7 @@ class Downloadboob(object):
                     print("Impossible to find info about the video %s :\n%s : %s" % (video.id+" - "+video.title,type(test2).__name__,test2 ) ,file=stderr)
                 else:
                     print("Impossible to find info about the video %s :\n%s : %s" % (video.id,type(test2).__name__,test2) ,file=stderr)
+            sys.stderr=stderr_root
 
 
     def purge(self):
@@ -266,6 +268,8 @@ class Downloadboob(object):
                    from video import NolifeTVVideo as video_init
                 elif self.backend.name == "youtube":
                    from video import YoutubeVideo as video_init
+                else:
+                   from weboob.capabilities.video import BaseVideo as video_init
                 list_videos.append(video_init(id))
         return list_videos
 
@@ -432,7 +436,8 @@ class Downloadboob(object):
 
 DOWNLOAD_DIRECTORY=".files"
 devnull=open('/dev/null', 'w', encoding="utf-8")
-
+stderr_root=sys.stderr
+stdout_root=sys.stdout
 if False: # set it to False to see majors errors
   stderr=devnull 
 else:
