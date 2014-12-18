@@ -71,10 +71,10 @@ def check_backend(backend_name):
         output = check_output(["videoob","backend","list-modules"],stderr=stderr, env={"PYTHONIOENCODING": "UTF-8"}).decode('utf8')
         list_backend=[]
         for line in output.splitlines():
-          if not matched(line,"Modules list:"):
+          if not matched(line,"^Modules list:"):
             list_backend.append(line.split("] ")[1].split(" ")[0])
         if backend_name in list_backend:
-            print('Installing backend %s' %  backend_name, file=stdout)
+            print('Installing backend %s' %  backend_name)
             return call(["videoob","backend","add",backend_name],stderr=stderr) == 0
         else:
             print('Backend %s unknown' %  backend_name, file=stdout)
@@ -189,20 +189,20 @@ class Downloadboob(object):
             for line in output.splitlines():
                 prefix=line.split(": ")[0]
                 suffix=line[len(prefix)+2:]
-                if matched(prefix,"ext"):
+                if prefix == "ext":
                     video.ext=suffix
-                elif matched(prefix,"title"):
+                elif prefix == "title":
                     video.title=suffix
-                elif matched(prefix,"description"):
+                elif prefix == "description":
                     video.description=suffix
-                elif matched(prefix,"url"):
+                elif prefix == "url":
                     video.url=suffix
-                elif matched(prefix,"author"):
+                elif prefix == "author":
                     video.author=suffix
-                elif matched(prefix,"duration"):
+                elif prefix == "duration":
                     t=datetime.strptime(suffix,"%H:%M:%S")
                     video.duration=timedelta(hours=t.hour, minutes=t.minute, seconds=t.second)
-                elif matched(prefix,"date") and suffix:
+                elif prefix == "date" and suffix:
                     video.date=datetime.strptime(suffix,"%Y-%m-%d %H:%M:%S")
         except CalledProcessError as test1:
             if video.title :
@@ -247,24 +247,24 @@ class Downloadboob(object):
 
     def do_search(self, pattern=None,pattern_type="search", sortby=CapVideo.SEARCH_RELEVANCE, nsfw=False):
         list_videos=[]
-        if matched(pattern_type,"search"):
+        if pattern_type == "search":
             list_videos=self.backend.search_videos(pattern, sortby, nsfw)
-        elif matched(pattern_type,"ls"):
+        elif pattern_type == "ls":
             for id in self.videoob_list_rep(pattern,self.backend.name):
                 sys.path.insert(0,backend_directory+"/"+self.backend.name+"/" ) # HACK
                 if 'video' in sys.modules:
                    del sys.modules['video']
-                if matched(self.backend.name,"arte"):
+                if self.backend.name == "arte":
                    from video import ArteVideo as video_init
-                elif matched(self.backend.name,"canalplus"):
+                elif self.backend.name == "canalplus":
                    from video import CanalplusVideo as video_init
-                elif matched(self.backend.name,"arretsurimages"):
+                elif self.backend.name == "arretsurimages":
                    from video import ArretSurImagesVideo as video_init
-                elif matched(self.backend.name,"dailymotion"):
+                elif self.backend.name == "dailymotion":
                    from video import DailymotionVideo as video_init
-                elif matched(self.backend.name,"nolifetv"):
+                elif self.backend.name == "nolifetv":
                    from video import NolifeTVVideo as video_init
-                elif matched(self.backend.name,"youtube"):
+                elif self.backend.name == "youtube":
                    from video import YoutubeVideo as video_init
                 list_videos.append(video_init(id))
         return list_videos
@@ -291,10 +291,10 @@ class Downloadboob(object):
         return videos
 
     def write_m3u(self, video):
-        if matched(video.ext,"m3u"):
+        if video.ext == "m3u" or video.ext == "m3u8":
             return self.do_download(video,conv=False)
         else:
-            if matched(video.url,"\.m3u"):
+            if matched(video.url,"\.m3u") or matched(video.url,"\.m3u8"):
                 return self.do_download(video,conv=False)
             else:
                 dest = self.get_filename(video,m3u=True)
@@ -336,7 +336,7 @@ class Downloadboob(object):
 
     def do_conv(self, video):
         dest = self.get_filename(video)
-        if matched(video.ext,"m3u"):
+        if  video.ext == "m3u" or video.ext == "m3u8":
            video.ext='avi'
            dest = self.get_filename(video)
            if not exec_avconv:
@@ -486,7 +486,7 @@ def do_work(q,r):
 
           print("For backend %s, start search for '%s'" % (backend_name,section),file=stdout)
           downloadboob.download(pattern, CapVideo.SEARCH_DATE, False, max_result, title_regexp, id_regexp,pattern_type,author_regexp,title_exclude)
-          if matched(pattern_type,"search"): # FIXME (AT LEAST) FOR YOUTUBE
+          if pattern_type == "search": # FIXME (AT LEAST) FOR YOUTUBE
               print("For backend %s, start search-bis for '%s'" % (backend_name,section),file=stdout)
               downloadboob.download(pattern, CapVideo.SEARCH_RELEVANCE, False, max_result, title_regexp, id_regexp,pattern_type,author_regexp,title_exclude)
           print("For backend %s, end search for '%s'" % (backend_name,section))
