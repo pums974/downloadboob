@@ -184,8 +184,8 @@ class Downloadboob(object):
         return sorted(set(list_id))
 
     def videoob_get_info(self,video): # THIS IS COSTLY
-        try:
-            output = check_output(['videoob', "info",'"'+video.id+"@"+self.backend.name+'"'],stderr=stderr, env={"PYTHONIOENCODING": "UTF-8"}).decode('utf8')
+        try: 
+            output = check_output(['videoob', "info","--backend="+self.backend.name,"--",video.id],stderr=stderr, env={"PYTHONIOENCODING": "UTF-8"}).decode('utf8') 
             for line in output.splitlines():
                 prefix=line.split(": ")[0]
                 suffix=line[len(prefix)+2:]
@@ -205,11 +205,17 @@ class Downloadboob(object):
                 elif matched(prefix,"date") and suffix:
                     video.date=datetime.strptime(suffix,"%Y-%m-%d %H:%M:%S")
         except CalledProcessError as test1:
-            print("videoob info %s failed : %s" % (video.id+"@"+self.backend.name,test1) ,file=stderr)
+            if video.title :
+                print("videoob info for %s failed : \n%s : %s" % (video.id+" - "+video.title,type(test1).__name__,test1 ) ,file=stderr)
+            else:
+                print("videoob info for %s failed : \n%s : %s" % (video.id,type(test1).__name__,test1 ) ,file=stderr)
             try:
-                self.backend.fill_video(video, ('ext','title', 'url', 'duration', 'author', 'date', 'description'))
+                self.backend.fill_video(video, ('ext','title', 'url', 'duration', 'author', 'date', 'description')) # This is incomplete for some backends
             except Exception as test2:
-                print("Impossible to find info about the video : %s" % test2,file=stderr)
+                if video.title :
+                    print("Impossible to find info about the video %s :\n%s : %s" % (video.id+" - "+video.title,type(test2).__name__,test2 ) ,file=stderr)
+                else:
+                    print("Impossible to find info about the video %s :\n%s : %s" % (video.id,type(test2).__name__,test2) ,file=stderr)
 
 
     def purge(self):
@@ -272,7 +278,7 @@ class Downloadboob(object):
                 if not video:
                     print('Video not found: %s' %  video, file=stderr)
                 elif not video.url:
-                    print('Error: the URL is not available : '+str(video.url), file=stderr)
+                    print('Error: the URL is not available : %s (%s)' % (video.url,video.id), file=stderr)
                 else:
                     if self.is_ok(video,title_regexp,id_regexp,author_regexp,title_exclude):
                         i+=1
@@ -330,7 +336,7 @@ class Downloadboob(object):
 
     def do_conv(self, video):
         dest = self.get_filename(video)
-        if matched(str(video.ext),"m3u"):
+        if matched(video.ext,"m3u"):
            video.ext='avi'
            dest = self.get_filename(video)
            if not exec_avconv:
