@@ -38,6 +38,7 @@ from multiprocessing import Pool,Process,Queue,cpu_count
 from Queue import Empty
 
 from io import open
+from traceback import print_tb
 # hack to workaround bash redirection and encoding problem
 import sys
 import codecs
@@ -84,11 +85,12 @@ def check_exec(executable):
     print('Looking for which %s to use : ' %  executable, file=stdout, end="")
     try:
         output = check_output(['which', executable],stderr=stderr2).decode('utf8')
-        print('%s' %  output, file=stdout)
-        return output
     except CalledProcessError:
         print('None', file=stdout)
         return ""
+    else:
+        print('%s' %  output, file=stdout)
+        return output
 
 
 def matched(string, regexp):
@@ -186,6 +188,21 @@ class Downloadboob(object):
     def videoob_get_info(self,video): # THIS IS COSTLY
         try: 
             output = check_output(['videoob', "info","--backend="+self.backend.name,"--",video.id],stderr=stderr, env={"PYTHONIOENCODING": "UTF-8"}).decode('utf8') 
+        except CalledProcessError as test1:
+            if video.title :
+                print("videoob info for %s failed : \n%s : %s" % (video.id+" - "+video.title,type(test1).__name__,test1 ) ,file=stderr)
+            else:
+                print("videoob info for %s failed : \n%s : %s" % (video.id,type(test1).__name__,test1 ) ,file=stderr)
+            sys.stderr=stderr
+            try:
+                self.backend.fill_video(video, ('ext','title', 'url', 'duration', 'author', 'date', 'description')) # This is incomplete for some backends
+            except Exception as test2:
+                if video.title :
+                    print("Impossible to find info about the video %s :\n%s : %s" % (video.id+" - "+video.title,type(test2).__name__,test2 ) ,file=stderr)
+                else:
+                    print("Impossible to find info about the video %s :\n%s : %s" % (video.id,type(test2).__name__,test2) ,file=stderr)
+            sys.stderr=stderr_root
+        else:
             for line in output.splitlines():
                 prefix=line.split(": ")[0]
                 suffix=line[len(prefix)+2:]
@@ -204,21 +221,6 @@ class Downloadboob(object):
                     video.duration=timedelta(hours=t.hour, minutes=t.minute, seconds=t.second)
                 elif prefix == "date" and suffix:
                     video.date=datetime.strptime(suffix[0:19],"%Y-%m-%d %H:%M:%S")
-        except CalledProcessError as test1:
-            if video.title :
-                print("videoob info for %s failed : \n%s : %s" % (video.id+" - "+video.title,type(test1).__name__,test1 ) ,file=stderr)
-            else:
-                print("videoob info for %s failed : \n%s : %s" % (video.id,type(test1).__name__,test1 ) ,file=stderr)
-            sys.stderr=stderr
-            try:
-                self.backend.fill_video(video, ('ext','title', 'url', 'duration', 'author', 'date', 'description')) # This is incomplete for some backends
-            except Exception as test2:
-                if video.title :
-                    print("Impossible to find info about the video %s :\n%s : %s" % (video.id+" - "+video.title,type(test2).__name__,test2 ) ,file=stderr)
-                else:
-                    print("Impossible to find info about the video %s :\n%s : %s" % (video.id,type(test2).__name__,test2) ,file=stderr)
-            sys.stderr=stderr_root
-
 
     def purge(self):
         #remove link if target have been removed
@@ -442,8 +444,9 @@ if False: # set it to False to see majors errors
   stderr=devnull 
 else:
   stderr=sys.stderr
-if True: # set it to False to see minor errors
-  stderr2=devnull 
+if True: # set it to False to see minor errors and traceback
+  stderr2=devnull
+  sys.tracebacklimit = 0
 else:
   stderr2=sys.stderr
 if True: # set it to False to see details
@@ -453,51 +456,61 @@ else:
 
 nproc=cpu_count()
 def do_work(q,r):
-  while True:
-    try:
-        section=q.get(block=False)
-        backend_name=config.get(section, "backend").decode('utf8')
-        if check_backend(backend_name):
-          pattern=config.get(section, "pattern").decode('utf8')
-          section_sublinks_directory=config.get(section,"directory").decode('utf8')
-          if config.has_option(section, "type"):
-              pattern_type=config.get(section, "type").decode('utf8')
-          else:
-              pattern_type="search"
-          if config.has_option(section, "title_regexp"):
-              title_regexp=config.get(section, "title_regexp").decode('utf8')
-          else:
-              title_regexp=None
-          if config.has_option(section, "title_exclude"):
-              title_exclude=config.get(section, "title_exclude").decode('utf8')
-          else:
-              title_exclude=None
-          if config.has_option(section, "id_regexp"):
-              id_regexp=config.get(section, "id_regexp").decode('utf8')
-          else:
-              id_regexp=None
-          if config.has_option(section, "author_regexp"):
-              author_regexp=config.get(section, "author_regexp").decode('utf8')
-          else:
-              author_regexp=None
-          if config.has_option(section, "max_results"):
-              max_result=config.getint(section, "max_results")
-          else:
-              max_result=50
-          section_links_directory=os.path.join(links_directory, section_sublinks_directory)
+  try:
+    while True:
+      try:
+          section=q.get(block=False)
+      except Empty:
+          if q.empty():
+            break
+      else:
+          backend_name=config.get(section, "backend").decode('utf8')
+          if check_backend(backend_name):
+            pattern=config.get(section, "pattern").decode('utf8')
+            section_sublinks_directory=config.get(section,"directory").decode('utf8')
+            if config.has_option(section, "type"):
+                pattern_type=config.get(section, "type").decode('utf8')
+            else:
+                pattern_type="search"
+            if config.has_option(section, "title_regexp"):
+                title_regexp=config.get(section, "title_regexp").decode('utf8')
+            else:
+                title_regexp=None
+            if config.has_option(section, "title_exclude"):
+                title_exclude=config.get(section, "title_exclude").decode('utf8')
+            else:
+                title_exclude=None
+            if config.has_option(section, "id_regexp"):
+                id_regexp=config.get(section, "id_regexp").decode('utf8')
+            else:
+                id_regexp=None
+            if config.has_option(section, "author_regexp"):
+                author_regexp=config.get(section, "author_regexp").decode('utf8')
+            else:
+                author_regexp=None
+            if config.has_option(section, "max_results"):
+                max_result=config.getint(section, "max_results")
+            else:
+                max_result=50
+            section_links_directory=os.path.join(links_directory, section_sublinks_directory)
 
-          downloadboob = Downloadboob(section,backend_name, download_directory, section_links_directory)
-          downloadboob.purge()
+            downloadboob = Downloadboob(section,backend_name, download_directory, section_links_directory)
+            downloadboob.purge()
 
-          print("For backend %s, start search for '%s'" % (backend_name,section),file=stdout)
-          downloadboob.download(pattern, CapVideo.SEARCH_DATE, False, max_result, title_regexp, id_regexp,pattern_type,author_regexp,title_exclude)
-          if pattern_type == "search": # FIXME (AT LEAST) FOR YOUTUBE
-              print("For backend %s, start search-bis for '%s'" % (backend_name,section),file=stdout)
-              downloadboob.download(pattern, CapVideo.SEARCH_RELEVANCE, False, max_result, title_regexp, id_regexp,pattern_type,author_regexp,title_exclude)
-          print("For backend %s, end search for '%s'" % (backend_name,section))
-    except Empty:
-      if q.empty():
-        break
+            print("For backend %s, start search for '%s'" % (backend_name,section),file=stdout)
+            downloadboob.download(pattern, CapVideo.SEARCH_DATE, False, max_result, title_regexp, id_regexp,pattern_type,author_regexp,title_exclude)
+            if pattern_type == "search": # FIXME (AT LEAST) FOR YOUTUBE
+                print("For backend %s, start search-bis for '%s'" % (backend_name,section),file=stdout)
+                downloadboob.download(pattern, CapVideo.SEARCH_RELEVANCE, False, max_result, title_regexp, id_regexp,pattern_type,author_regexp,title_exclude)
+            print("For backend %s, end search for '%s'" % (backend_name,section))
+  except KeyboardInterrupt:
+    print("Shutdown requested...exiting")
+    exit(0)
+  except Exception as e:
+    print("Something wrong happend")
+    print(e,file=stderr)
+    print_tb(exc_traceback,file=stderr2)
+    exit(3)
 
 
 
