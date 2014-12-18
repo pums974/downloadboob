@@ -111,7 +111,7 @@ Future
 - Refactorization
 - Rss ?
 - Podcasts ?
-
+- thumbnail
 
 
 

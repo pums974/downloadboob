@@ -178,10 +178,6 @@ class Downloadboob(object):
         return sorted(set(list_id))
 
     def videoob_get_info(self,video): # THIS IS COSTLY
-#        self.backend.fill_video(video, ('ext','title', 'url', 'duration', 'author', 'date')) # BUGGY FOR ARTE
-#        if (isinstance(video.id    , NotLoadedType)) or \
-#           (isinstance(video.title , NotLoadedType)) or \
-#           (isinstance(video.author, NotLoadedType)):
         try:
             output = check_output(['videoob', "info",video.id+"@"+self.backend.name],stderr=devnull,shell=False, env={"PYTHONIOENCODING": "UTF-8"}).decode('utf8')
             for line in output.splitlines():
@@ -204,6 +200,7 @@ class Downloadboob(object):
                     video.date=datetime.strptime(suffix,"%Y-%m-%d %H:%M:%S")
         except CalledProcessError:
             self.backend.fill_video(video, ('ext','title', 'url', 'duration', 'author', 'date', 'description')) # BUGGY FOR ARTE
+
     def purge(self):
         #remove link if file have been removed
         if not os.path.isdir(self.links_directory):
@@ -261,20 +258,20 @@ class Downloadboob(object):
         for video in list_videos:
             if self.is_ok(video,title_regexp,id_regexp,author_regexp,title_exclude):
                 self.videoob_get_info(video)
-                if not video:
-                    print('Video not found: %s' %  video, file=sys.stderr)
-                elif not video.url:
-                    print('Error: the URL is not available : '+str(video.url), file=sys.stderr)
-                else:
+                if video and video.url:
                     if self.is_ok(video,title_regexp,id_regexp,author_regexp,title_exclude):
                         i+=1
                         if not self.is_downloaded(video):
-#                            print("  %s\n    Description:%s\n    Author:%s\n    Id:%s\n    Duration:%s\n    Date:%s" % (video.title,video.description,video.author, video.id, video.duration, video.date))
                             videos.append(video)
+#                            print("  %s\n    Description:%s\n    Author:%s\n    Id:%s\n    Duration:%s\n    Date:%s" % (video.title,video.description,video.author, video.id, video.duration, video.date))
 #                        else:
 #                            print("Already downloaded, check %s" % video.id)
                         if i == max_results:
                             break
+#                elif not video:
+#                    print('Video not found: %s' %  video, file=sys.stderr)
+#                elif not video.url:
+#                    print('Error: the URL is not available : '+str(video.url), file=sys.stderr)
         return videos
 
     def write_m3u(self, video):
@@ -304,22 +301,22 @@ class Downloadboob(object):
             if not check_exec('rtmpdump'):
                 print('I Need rtmpdump')
                 return 1
-            args = ('rtmpdump', '-e', '-r', video.url, '-o', dest)
+            args = ['rtmpdump', '-e', '-r', video.url, '-o', dest]
         elif video.url.startswith('mms'):
             if not check_exec('mimms'):
                 print('I Need mimms')
                 return 1
-            args = ('mimms', video.url, dest)
+            args = ['mimms', video.url, dest]
         else:
-            if not check_exec('curl'):
-                if not check_exec('wget'):
+            if not check_exec('wget'):
+                if not check_exec('curl'):
                     print('I Need curl or wget')
                     return 1
                 else:
-                    args = ('wget','-q', video.url, '-O', dest)
+                    args = ['curl','-s', video.url, '-o', dest]
             else:
-                args = ('curl','-s', video.url, '-o', dest)
-        return os.spawnlp(os.P_WAIT, args[0], *args)       
+                args = ['wget','-q', video.url, '-O', dest]
+        return call(args,stderr=devnull,stdout=devnull,shell=False)
 
     def do_conv(self, video):
         dest = self.get_filename(video)
@@ -331,10 +328,10 @@ class Downloadboob(object):
                  print('I Need avconv or ffmpeg')
                  return 1
               else:
-                 args = ('ffmpeg','-i', video.url, '-vcodec','copy','-acodec','copy','-threads', '8','-loglevel','error', dest) #"-stat"
+                 args = ['ffmpeg','-i', video.url, '-vcodec','copy','-acodec','copy','-loglevel','error', dest] #"-stat" ,'-threads', '8'
            else:
-              args = ('avconv','-i', video.url, '-c','copy', dest)
-           return os.spawnlp(os.P_WAIT, args[0], *args)
+              args = ['avconv','-i', video.url, '-c','copy', dest]
+           return call(args,stderr=devnull,stdout=devnull,shell=False)
         else:
            return 0
 
@@ -343,7 +340,7 @@ class Downloadboob(object):
         idname = self.get_filename(video, relative=True,m3u=m3u)
         absolute_idname = self.get_filename(video, relative=False,m3u=m3u)
         if not os.path.islink(linkname) and os.path.isfile(absolute_idname):
-            print("%s -> %s" % (linkname, idname))
+#            print("%s -> %s" % (linkname, idname))
             os.symlink(idname, linkname)
 
     def do_mv(self, video,m3u=False):
@@ -351,7 +348,7 @@ class Downloadboob(object):
         idname = self.get_filename(video, relative=True,m3u=m3u)
         absolute_idname = self.get_filename(video, relative=False,m3u=m3u)
         if not os.path.isfile(linkname) and os.path.isfile(absolute_idname):
-            print("%s -> %s" % (linkname, absolute_idname))
+#            print("%s -> %s" % (absolute_idname,linkname))
             os.rename(absolute_idname, linkname)
             open(absolute_idname, 'w').close() 
 
@@ -360,7 +357,7 @@ class Downloadboob(object):
         nfoname = nfoname+".nfo"
         if not os.path.isfile(nfoname):
             Show_name = self.links_directory.split("/")[-1]
-            print("  create %s" % nfoname)
+#            print("  create %s" % nfoname)
             f=open(nfoname,'w')
             write_file(f,"<episodedetails>\n")
             write_file(f,"  <title>"+video.title+"</title>\n")
@@ -397,7 +394,7 @@ class Downloadboob(object):
         # download videos
         if videos:
             for video in videos:
-                print("Downloading..."+video.title)
+                print("Downloading... "+video.title)
                 if kodi:                            # THE "TITLE" BECOME "S00E00 - TITLE (ID)"
                     self.rewrite_title(video)
                 if down_live:                       # CREATE LIVE STREAM
@@ -411,6 +408,9 @@ class Downloadboob(object):
                     else:
                         self.do_mv(video)           # MOVE FILES FOR A BEAUTIFULL LIBRARY
                         self.write_nfo(video)       # CREATE NFO FILES FOR KODI
+                    print("Downloaded :"+video.title)
+                else:
+                    print("Failed download :"+video.title)
 
 
 
@@ -447,7 +447,7 @@ def do_work(q,r):
           if config.has_option(section, "max_results"):
               max_result=config.getint(section, "max_results")
           else:
-              max_result=2
+              max_result=50
           section_links_directory=os.path.join(links_directory, section_sublinks_directory)
 
           downloadboob = Downloadboob(section,backend_name, download_directory, section_links_directory)
