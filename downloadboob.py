@@ -203,7 +203,7 @@ class Downloadboob(object):
                     t=datetime.strptime(suffix,"%H:%M:%S")
                     video.duration=timedelta(hours=t.hour, minutes=t.minute, seconds=t.second)
                 elif prefix == "date" and suffix:
-                    video.date=datetime.strptime(suffix,"%Y-%m-%d %H:%M:%S")
+                    video.date=datetime.strptime(suffix[0:19],"%Y-%m-%d %H:%M:%S")
         except CalledProcessError as test1:
             if video.title :
                 print("videoob info for %s failed : \n%s : %s" % (video.id+" - "+video.title,type(test1).__name__,test1 ) ,file=stderr)
