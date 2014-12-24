@@ -280,13 +280,14 @@ class Downloadboob(object):
         i=0
         for video in list_videos:
             if self.is_ok(video,title_regexp,id_regexp,author_regexp,title_exclude):
-                self.videoob_get_info(video)
-                if not video:
-                    print('Video not found: %s' %  video, file=stderr)
-                elif not video.url:
-                    print('Error: the URL is not available : %s (%s)' % (video.url,video.id), file=stderr)
-                else:
-                    if self.is_ok(video,title_regexp,id_regexp,author_regexp,title_exclude):
+                if not self.is_downloaded(video):
+                  self.videoob_get_info(video)
+                  if not video:
+                      print('Video not found: %s' %  video, file=stderr)
+                  elif not video.url:
+                      print('Error: the URL is not available : %s (%s)' % (video.url,video.id), file=stderr)
+                  else:
+                      if self.is_ok(video,title_regexp,id_regexp,author_regexp,title_exclude):
                         i+=1
                         if not self.is_downloaded(video):
                             videos.append(video)
@@ -387,7 +388,7 @@ class Downloadboob(object):
             f.write("  <season>0</season>\n")
             f.write("  <episode>0</episode>\n")
             if video.date:
-                  f.write("  <aired>"+video.date.strftime("%y/%m/%d")+"</aired>\n")
+                  f.write("  <aired>"+video.date.isoformat()+"</aired>\n")
             if video.duration:
                   f.write("  <runtime>"+str(int(video.duration.total_seconds()/60))+"</runtime>\n")
             if video.author:
@@ -401,7 +402,7 @@ class Downloadboob(object):
             f.write("</episodedetails>\n")
             f.close()
 
-    def download(self, pattern=None, sortby=CapVideo.SEARCH_RELEVANCE, nsfw=False, max_results=50, title_regexp=None, id_regexp=None, \
+    def download(self, pattern=None, sortby=CapVideo.SEARCH_RELEVANCE, nsfw=False, max_results=20, title_regexp=None, id_regexp=None, \
                  pattern_type="search",author_regexp=None,title_exclude=None):
 
         # create directory for links
@@ -493,6 +494,7 @@ def do_work(q,r):
             else:
                 max_result=50
             section_links_directory=os.path.join(links_directory, section_sublinks_directory)
+     #       if not backend_name == "youtube":
 
             downloadboob = Downloadboob(section,backend_name, download_directory, section_links_directory)
             downloadboob.purge()
