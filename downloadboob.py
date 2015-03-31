@@ -1,5 +1,5 @@
 #!/usr/bin/env python2
-# -*- coding: utf8 -*-
+# -*- coding: utf-8 -*-
 
 # Copyright(C) 2012 Alexandre Flament
 #
@@ -24,6 +24,7 @@ from __future__ import unicode_literals
 import subprocess
 import os
 import re
+import logging
 
 import ConfigParser
 
@@ -31,72 +32,85 @@ from weboob.core import Weboob
 from weboob.capabilities.base import NotLoadedType
 from weboob.capabilities.video import CapVideo,BaseVideo
 
-from subprocess import Popen, check_output,call,CalledProcessError
+from subprocess import Popen, check_output,call,CalledProcessError,PIPE
 from datetime import datetime,timedelta
 
 from multiprocessing import Pool,Process,Queue,cpu_count
 from Queue import Empty
 
 from io import open
-from traceback import print_tb
+from traceback import format_exc
 # hack to workaround bash redirection and encoding problem
 import sys
 import codecs
 import locale
 
-if sys.stdout.encoding is None:
-    (lang, enc) = locale.getdefaultlocale()
-    if enc is not None:
-        (e, d, sr, sw) = codecs.lookup(enc)
-        # sw will encode Unicode data to the locale-specific character set.
-        sys.stdout = sw(sys.stdout)
-# end of hack
-
-def removeNonAscii(s): return "".join(i for i in s if ord(i)<128)
+#if sys.stdout.encoding is None:
+#    (lang, enc) = locale.getdefaultlocale()
+#    if enc is not None:
+#        (e, d, sr, sw) = codecs.lookup(enc)
+#        # sw will encode Unicode data to the locale-specific character set.
+#        sys.stdout = sw(sys.stdout)
+## end of hack
 
 rx = re.compile('[ \\/\\?\\:\\>\\<\\!\\\\\\*]+', re.UNICODE)
+DOWNLOAD_DIRECTORY=".files"
+
+def removeNonAscii(s): return "".join(i for i in s if ord(i)<128)
 
 def removeSpecial(s):
     return rx.sub(' ', '%s' % s)
 
+def matched(string, regexp):
+    if regexp and string:
+        return re.search(regexp, string) is not None
+    return None
+
 def check_backend(backend_name):
     # Check if the backend is installed
-    output = check_output(['videoob', "backend","list"],stderr=stderr, env={"PYTHONIOENCODING": "UTF-8"}).decode('utf8')
+    output,err = Popen(['videoob', "backend","list"],stdout=PIPE,stderr=PIPE).communicate()
+    logging.debug(output)
+    if err:
+        logging.info(err.decode('utf8'))
     list_backend = output.splitlines()[0].split(": ")[1].split(", ")
     if backend_name in list_backend:
-        print('Backend %s found' %  backend_name, file=stdout)
+        logging.info('Backend %s found' %  backend_name)
         return True
     else:
-        print('Backend %s not found' %  backend_name, file=stdout)
+        logging.info('Backend %s not found' %  backend_name)
         # Check if the backend is installable
-        output = check_output(["videoob","backend","list-modules"],stderr=stderr, env={"PYTHONIOENCODING": "UTF-8"}).decode('utf8')
+        output,err = Popen(["videoob","backend","list-modules"],stdout=PIPE,stderr=PIPE).communicate()
+        logging.debug(output)
+        if err:
+            logging.error(err)
         list_backend=[]
         for line in output.splitlines():
           if not matched(line,"^Modules list:"):
             list_backend.append(line.split("] ")[1].split(" ")[0])
         if backend_name in list_backend:
             print('Installing backend %s' %  backend_name)
-            return call(["videoob","backend","add",backend_name],stderr=stderr) == 0
+            p = Popen(["videoob","backend","add",backend_name],stdout=PIPE,stderr=PIPE)
+            output,err = p.communicate()
+            res=p.wait()
+            logging.info(output)
+            if err:
+                 logging.error(err)
+            return res == 0
         else:
-            print('Backend %s unknown' %  backend_name, file=stdout)
+            logging.error('Backend %s unknown' %  backend_name)
             return False
 
 def check_exec(executable):
-    print('Looking for which %s to use : ' %  executable, file=stdout, end="")
     try:
-        output = check_output(['which', executable],stderr=stderr2).decode('utf8')
+        output,err = Popen(['which', executable],stdout=PIPE,stderr=PIPE).communicate()
+        if err:
+            logging.debug(err.decode('utf8'))
     except CalledProcessError:
-        print('None', file=stdout)
+        logging.info('%s Not found' %  executable)
         return ""
     else:
-        print('%s' %  output, file=stdout)
+        logging.info('Path to %s : %s' %  (executable, output))
         return output
-
-
-def matched(string, regexp):
-    if regexp and string:
-        return re.search(regexp, string) is not None
-    return None
 
 class Downloadboob(object):
 
@@ -122,7 +136,7 @@ class Downloadboob(object):
 
     def is_downloaded(self, video):
         if os.path.isfile(self.get_filename(video)) or os.path.isfile(self.get_filename(video,m3u=True)):
-           print("%s Already downloaded : %s" % (video.id,video.title), file=stdout)
+           logging.info("%s Already downloaded : %s" % (video.id,video.title))
            return True
         else:
            return False
@@ -187,20 +201,23 @@ class Downloadboob(object):
 
     def videoob_get_info(self,video): # THIS IS COSTLY
         try: 
-            output = check_output(['videoob', "info","--backend="+self.backend.name,"--",video.id],stderr=stderr, env={"PYTHONIOENCODING": "UTF-8"}).decode('utf8') 
+            output,err = Popen(['videoob', "info","--backend="+self.backend.name,"--",video.id],stdout=PIPE,stderr=PIPE).communicate()
+            output=output.decode("utf-8")
+            if err:
+                logging.error(err)
         except CalledProcessError as test1:
             if video.title :
-                print("videoob info for %s failed : \n%s : %s" % (video.id+" - "+video.title,type(test1).__name__,test1 ) ,file=stderr)
+                logging.error("videoob info for %s failed : \n%s : %s" % (video.id+" - "+video.title,type(test1).__name__,test1 ))
             else:
-                print("videoob info for %s failed : \n%s : %s" % (video.id,type(test1).__name__,test1 ) ,file=stderr)
+                logging.error("videoob info for %s failed : \n%s : %s" % (video.id,type(test1).__name__,test1 ))
             sys.stderr=stderr
             try:
                 self.backend.fill_video(video, ('ext','title', 'url', 'duration', 'author', 'date', 'description')) # This is incomplete for some backends
             except Exception as test2:
                 if video.title :
-                    print("Impossible to find info about the video %s :\n%s : %s" % (video.id+" - "+video.title,type(test2).__name__,test2 ) ,file=stderr)
+                    logging.error("Impossible to find info about the video %s :\n%s : %s" % (video.id+" - "+video.title,type(test2).__name__,test2 ) )
                 else:
-                    print("Impossible to find info about the video %s :\n%s : %s" % (video.id,type(test2).__name__,test2) ,file=stderr)
+                    logging.error("Impossible to find info about the video %s :\n%s : %s" % (video.id,type(test2).__name__,test2))
             sys.stderr=stderr_root
         else:
             for line in output.splitlines():
@@ -230,19 +247,19 @@ class Downloadboob(object):
         for local_link_name in dirList:
             link_name = self.links_directory + "/" + local_link_name
             if not self.check_link(link_name):
-                print("Remove %s" % link_name,file=stdout)
+                logging.info("Remove %s" % link_name)
                 os.remove(link_name)
 
     def init_dir(self):
         # create directory
         if not os.path.isdir(self.links_directory):
-            print("  create link directory : %s" % self.links_directory,file=stdout)
+            logging.debug("  create link directory : %s" % self.links_directory)
             os.makedirs(self.links_directory)
         if kodi:
             file_name = os.path.join(self.links_directory, 'tvshow.nfo')
             Show_name = self.links_directory.split("/")[-1]
             if not os.path.isfile(file_name):
-                print("  create %s" % file_name,file=stdout)
+                logging.debug("  create %s" % file_name)
                 f=open(file_name,'w')
                 f.write("<tvshow>\n")
                 f.write("  <title>"+Show_name+"</title>\n")
@@ -283,16 +300,16 @@ class Downloadboob(object):
                 if not self.is_downloaded(video):
                   self.videoob_get_info(video)
                   if not video:
-                      print('Video not found: %s' %  video, file=stderr)
+                      logging.error('Video not found: %s' %  video)
                   elif not video.url:
-                      print('Error: the URL is not available : %s (%s)' % (video.url,video.id), file=stderr)
+                      logging.error('Error: the URL is not available : %s (%s)' % (video.url,video.id))
                   else:
                       if self.is_ok(video,title_regexp,id_regexp,author_regexp,title_exclude):
                         i+=1
                         if not self.is_downloaded(video):
                             videos.append(video)
-                            print("New Vidéo :  %s\n    Description:%s\n    Author:%s\n    Id:%s\n    Duration:%s\n    Date:%s" 
-                                          % (video.title,video.description,video.author, video.id, video.duration, video.date), file=stdout)
+                            logging.info("New Vidéo :  %s\n    Description:%s\n    Author:%s\n    Id:%s\n    Duration:%s\n    Date:%s" 
+                                          % (video.title,video.description,video.author, video.id, video.duration, video.date))
                         if i == max_results:
                             break
         return videos
@@ -306,7 +323,7 @@ class Downloadboob(object):
             else:
                 dest = self.get_filename(video,m3u=True)
                 Show_name = self.links_directory.split("/")[-1]
-                print("  create %s" % dest, file=stdout)
+                logging.debug("  create %s" % dest)
                 f=open(dest, 'w')
                 f.write("#EXTINF: ")
                 if video.duration:
@@ -322,24 +339,30 @@ class Downloadboob(object):
         dest = self.get_filename(video)
         if video.url.startswith('rtmp'):
             if not exec_rtmpdump:
-                print('I Need rtmpdump', file=stderr)
+                logging.error('I Need rtmpdump')
                 return 1
             args = ['rtmpdump', '-e', '-r', video.url, '-o', dest]
         elif video.url.startswith('mms'):
             if not exec_mimms:
-                print('I Need mimms', file=stderr)
+                logging.error('I Need mimms')
                 return 1
             args = ['mimms', video.url, dest]
         else:
             if not exec_wget:
                 if not exec_curl:
-                    print('I Need curl or wget', file=stderr)
+                    logging.error('I Need curl or wget')
                     return 1
                 else:
                     args = ['curl','-s', video.url, '-o', dest]
             else:
                 args = ['wget','-q', video.url, '-O', dest]
-        return call(args,stderr=stderr,stdout=stdout)
+        p = Popen(args,stdout=PIPE,stderr=PIPE)
+        output,err = p.communicate()
+        res=p.wait()
+        logging.info(output)
+        if err:
+            logging.error(err)
+        return res
 
     def do_conv(self, video):
         dest = self.get_filename(video)
@@ -348,13 +371,19 @@ class Downloadboob(object):
            dest = self.get_filename(video)
            if not exec_avconv:
               if not exec_ffmpeg:
-                 print('I Need avconv or ffmpeg', file=stderr)
+                 logging.error('I Need avconv or ffmpeg')
                  return 1
               else:
                  args = ['ffmpeg','-i', video.url, '-vcodec','copy','-acodec','copy','-loglevel','error', dest] #"-stat" ,'-threads', '8'
            else:
               args = ['avconv','-i', video.url, '-c','copy', dest]
-           return call(args,stderr=stderr,stdout=stdout)
+           p = Popen(args,stdout=PIPE,stderr=PIPE)
+           output,err = p.communicate()
+           res=p.wait()
+           logging.info(output)
+           if err:
+                logging.debug(err)
+           return res
         else:
            return 0
 
@@ -363,7 +392,7 @@ class Downloadboob(object):
         idname = self.get_filename(video, relative=True,m3u=m3u)
         absolute_idname = self.get_filename(video, relative=False,m3u=m3u)
         if not os.path.islink(linkname) and os.path.isfile(absolute_idname):
-            print("  %s -> %s" % (linkname, idname), file=stdout)
+            logging.info("  %s -> %s" % (linkname, idname))
             os.symlink(idname, linkname)
 
     def do_mv(self, video,m3u=False):
@@ -371,7 +400,7 @@ class Downloadboob(object):
         idname = self.get_filename(video, relative=True,m3u=m3u)
         absolute_idname = self.get_filename(video, relative=False,m3u=m3u)
         if not os.path.isfile(linkname) and os.path.isfile(absolute_idname):
-            print("  %s => %s" % (absolute_idname,linkname), file=stdout)
+            logging.info("  %s => %s" % (absolute_idname,linkname))
             os.rename(absolute_idname, linkname)
             open(absolute_idname, 'w').close() 
 
@@ -380,7 +409,7 @@ class Downloadboob(object):
         nfoname = nfoname+".nfo"
         if not os.path.isfile(nfoname):
             Show_name = self.links_directory.split("/")[-1]
-            print("  create %s" % nfoname, file=stdout)
+            logging.info("  create %s" % nfoname)
             f=open(nfoname,'w')
             f.write("<episodedetails>\n")
             f.write("  <title>"+video.title+"</title>\n")
@@ -435,36 +464,18 @@ class Downloadboob(object):
                 else:
                     print("Failed download :"+video.title)
 
-
-
-DOWNLOAD_DIRECTORY=".files"
-devnull=open('/dev/null', 'w', encoding="utf-8")
-stderr_root=sys.stderr
-stdout_root=sys.stdout
-if False: # set it to False to see majors errors
-  stderr=devnull 
-else:
-  stderr=sys.stderr
-if True: # set it to False to see minor errors and traceback
-  stderr2=devnull
-  sys.tracebacklimit = 0
-else:
-  stderr2=sys.stderr
-if True: # set it to False to see details
-  stdout=devnull 
-else:
-  stdout=sys.stdout
-
-nproc=cpu_count()
 def do_work(q,r):
   try:
     while True:
       try:
+# Is there any work to do ?
           section=q.get(block=False)
       except Empty:
+# Nothing to do, kill myself
           if q.empty():
             break
       else:
+# Extract details of my work from config file
           backend_name=config.get(section, "backend").decode('utf8')
           if check_backend(backend_name):
             pattern=config.get(section, "pattern").decode('utf8')
@@ -496,13 +507,16 @@ def do_work(q,r):
             section_links_directory=os.path.join(links_directory, section_sublinks_directory)
      #       if not backend_name == "youtube":
 
+# Initialize and do some cleaning
             downloadboob = Downloadboob(section,backend_name, download_directory, section_links_directory)
             downloadboob.purge()
 
-            print("For backend %s, start search for '%s'" % (backend_name,section),file=stdout)
+# Search and download
+            logging.info("For backend %s, start search for '%s'" % (backend_name,section))
             downloadboob.download(pattern, CapVideo.SEARCH_DATE, False, max_result, title_regexp, id_regexp,pattern_type,author_regexp,title_exclude)
+# Repeat, because the SEARCH_RELEVANCE may give better results than SEARCH_DATE
             if pattern_type == "search": # FIXME (AT LEAST) FOR YOUTUBE
-                print("For backend %s, start search-bis for '%s'" % (backend_name,section),file=stdout)
+                logging.info("For backend %s, start search-bis for '%s'" % (backend_name,section))
                 downloadboob.download(pattern, CapVideo.SEARCH_RELEVANCE, False, max_result, title_regexp, id_regexp,pattern_type,author_regexp,title_exclude)
             print("For backend %s, end search for '%s'" % (backend_name,section))
   except KeyboardInterrupt:
@@ -510,12 +524,29 @@ def do_work(q,r):
     exit(0)
   except Exception as e:
     print("Something wrong happend")
-    print(e,file=stderr)
-    print_tb(exc_traceback,file=stderr2)
+    stk=format_exc()
+    logging.debug(stk)
     exit(3)
 
+def init_logging():
+# define the logging file
+# it's possible to set the level to logging.DEBUG if you want more verbosity
+    logging.basicConfig(level=logging.INFO,
+                        format="%(asctime)s [%(levelname)-5.5s]  %(message)s",
+                        datefmt='%m-%d %H:%M',
+                        filename='downloadboob.log')
 
+# Also log on the console
+# it's possible to set the level to logging.DEBUG if you want more verbosity
+    console = logging.StreamHandler()
+    console.setLevel(logging.WARNING)
+    logFormatter = logging.Formatter("%(message)s")
+    console.setFormatter(logFormatter)
+    logging.getLogger('').addHandler(console)
 
+init_logging()
+
+# Check availability of dependencies
 exec_videoob=check_exec('videoob')
 exec_wget=check_exec('wget')
 exec_curl=check_exec('curl')
@@ -524,13 +555,21 @@ exec_ffmpeg=check_exec('ffmpeg')
 exec_rtmpdump=check_exec('rtmpdump')
 exec_mimms=check_exec('mimms')
 
-
+# Crash if we don't find videoob
 if not exec_videoob:
     print('I need videoob !')
     exit(1)
 
-print("Backends update",file=stdout)
-Popen(["weboob-config","update"],stdout=stdout,stderr=stderr).wait()
+# Due to frequent updates to websites
+# Update the backends
+logging.info("Backends update")
+out,err = Popen(["weboob-config","update"],stdout=PIPE,stderr=PIPE).communicate()
+logging.info(out)
+if err:
+    logging.error(err)
+
+# Count the number of process we have at out disposal    
+nproc=cpu_count()
 
 config = ConfigParser.ConfigParser()
 config.read(['/etc/downloadboob.conf', os.path.expanduser('~/downloadboob.conf'), 'downloadboob.conf'])
@@ -561,19 +600,24 @@ else:
     backend_directory=os.path.expanduser("~/.local/share/weboob/modules/1.0/")
 
 
+
 if __name__ == '__main__':
+# Each section of the config file is a Task to be done by one process or an another
+# Build a queue with those tasks
   work_queue=Queue()
   res_queue=Queue()
   for section in config.sections():
     if section != "main":
       work_queue.put(section)
   processes = [Process(target=do_work,args=(work_queue,res_queue,)) for i in range(nproc)]
+# Let's work
   for p in processes:
     p.start()
+# Wait for the work to be done
   for p in processes:
     p.join()
 
-
+# The end, everythind happened normally
 exit(0)
 
 
