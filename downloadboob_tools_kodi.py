@@ -6,13 +6,18 @@
     We will put here, functions directly relating to weboob
 """
 __author__ = 'Alexandre Poux'
+
 from downloadboob_tools_generic import *
+import codecs
 
 
 def rewrite_title(video):
     """
         Rename the title for KODI compatibility
         :param video:
+        :type video: video
+        :return: video with it's title changed
+        :rtype : None
     """
     video.title = "S00E00 - " + video.title + " (" + str(video.id) + ")"
     return True
@@ -21,10 +26,16 @@ def rewrite_title(video):
 def write_nfo(linkname, links_directory, backend_name, video):
     """
         Write nfo file for KODI
-        :param links_directory:
-        :param backend_name:
-        :param linkname:
-        :param video:
+        :param links_directory: Where to put the nfo file
+        :param backend_name: We use the backend name as a studio
+        :param linkname: nfo file
+        :param video: The video for which we write the nfo
+        :type links_directory: string
+        :type backend_name: string
+        :type linkname: string
+        :type video: video
+        :return: Nothing, the nfo hase been writen
+        :rtype : None
     """
     nfoname, _ = os.path.splitext(linkname)
     nfoname += ".nfo"
@@ -32,7 +43,7 @@ def write_nfo(linkname, links_directory, backend_name, video):
         logging.debug('writing nfo for video : %s' % video.title)
         show_name = links_directory.split("/")[-1]
         logging.info("  create %s" % nfoname)
-        f = open(nfoname, 'w')
+        f = codecs.open(nfoname, "w", "utf-8")
         f.write("<episodedetails>\n")
         f.write("  <title>" + video.title + "</title>\n")
         f.write("  <showtitle>" + show_name + "</showtitle>\n")

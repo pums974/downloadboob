@@ -3,7 +3,7 @@
 """
     Tools used for downloadboob
 
-    We will put here, functions directly relating to weboob
+    We will put here, functions directly relating to the search and download process
 """
 __author__ = 'Alexandre Poux'
 
@@ -144,7 +144,7 @@ class DownloadBoob(object):
             show_name = self.links_directory.split("/")[-1]
             if not os.path.isfile(file_name):
                 logging.debug("  create %s" % file_name)
-                f = open(file_name, 'w')
+                f = codecs.open(file_name, "w", "utf-8")
                 f.write(u"<tvshow>\n")
                 f.write(u"  <title>" + show_name + u"</title>\n")
                 f.write(u"</tvshow>\n")
@@ -188,7 +188,7 @@ class DownloadBoob(object):
             elif self.backend.name == "youtube":
                 from video import YoutubeVideo as Video_Init
             else:
-                from weboob.capabilities.video import BaseVideo as Video_Init
+                from weboob.capabilities.video import BaseVideo as Video_Init  # END OF HACK
             for videoid in videoob_list_rep(pattern, self.backend):
                 list_videos.append(Video_Init(videoid))
         if list_videos:
@@ -255,7 +255,7 @@ class DownloadBoob(object):
                 dest = self.get_filename(video, m3u=True)
                 show_name = self.links_directory.split("/")[-1]
                 logging.debug("  create %s" % dest)
-                f = open(dest, 'w')
+                f = codecs.open(dest, "w", "utf-8")
                 f.write("#EXTINF: ")
                 if video.duration:
                     f.write(str(video.duration))

@@ -86,18 +86,13 @@ def check_exec(executable):
         :param executable:
         :return:
     """
-    try:
-        output, error = Popen(['which', executable],
-                              stdout=PIPE,
-                              stderr=PIPE).communicate()
-        if not error:
-            logging.info('Path to %s : %s' % (executable, output.replace("\n", "")))
-            return output
-    except CalledProcessError:
-        logging.info('error with which !?!?' % executable)
+    output, error = Popen(['which', executable],
+                          stdout=PIPE, stderr=PIPE).communicate()
+    if error:
+        logging.info('%s Not found' % executable)
         return ""
-    logging.info('%s Not found' % executable)
-    return ""
+    logging.info('Path to %s : %s' % (executable, output.replace("\n", "")))
+    return output
 
 
 def check_link(links_directory, link_name):
