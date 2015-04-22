@@ -39,7 +39,7 @@ def write_nfo(linkname, links_directory, backend_name, video):
     """
     nfoname, _ = os.path.splitext(linkname)
     nfoname += ".nfo"
-    if not os.path.isfile(nfoname):
+    if not os.path.isfile(nfoname.encode('utf8')):
         logging.debug('writing nfo for video : %s' % video.title)
         show_name = links_directory.split("/")[-1]
         logging.info("  create %s" % nfoname)

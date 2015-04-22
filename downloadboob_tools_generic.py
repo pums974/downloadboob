@@ -102,10 +102,10 @@ def check_link(links_directory, link_name):
         :param links_directory:
         :param link_name:
     """
-    if os.path.islink(link_name):
-        file_name = os.readlink(link_name)
+    if os.path.islink(link_name.encode('utf8')):
+        file_name = os.readlink(link_name.encode('utf8')).decode('utf8')
         absolute_file_name = os.path.join(links_directory, file_name)
-        if os.path.isfile(absolute_file_name):
+        if os.path.isfile(absolute_file_name.encode('utf8')):
             logging.debug("Link still valid : %s -> %s" % (link_name, absolute_file_name))
             return True
         return False
@@ -118,15 +118,15 @@ def purge(links_directory):
         remove link if target have been removed
         :param links_directory:
     """
-    if not os.path.isdir(links_directory):
+    if not os.path.isdir(links_directory.encode('utf8')):
         return
     logging.debug("Purging %s" % links_directory)
-    dirlist = os.listdir(links_directory)
+    dirlist = os.listdir(links_directory.encode('utf8'))
     for local_link_name in dirlist:
-        link_name = links_directory + "/" + local_link_name
+        link_name = links_directory + "/" + local_link_name.decode('utf8')
         if not check_link(links_directory, link_name):
             logging.info("Removing %s" % link_name)
-            os.remove(link_name)
+            os.remove(link_name.encode('utf8'))
 
 
 def do_download(video, filename):

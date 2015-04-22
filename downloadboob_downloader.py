@@ -78,8 +78,8 @@ class DownloadBoob(object):
                                      self.backend_name)
         else:
             directory = os.path.join(self.download_directory, self.backend_name)
-            if not os.path.exists(directory):
-                os.makedirs(directory)
+            if not os.path.exists(directory.encode('utf8')):
+                os.makedirs(directory.encode('utf8'))
         if not m3u:
             ext = video.ext
             if not ext:
@@ -95,8 +95,8 @@ class DownloadBoob(object):
             :param video:
             :rtype : string
         """
-        if not os.path.exists(self.links_directory):
-            os.makedirs(self.links_directory)
+        if not os.path.exists(self.links_directory.encode('utf8')):
+            os.makedirs(self.links_directory.encode('utf8'))
         if not m3u:
             ext = video.ext
             if not ext:
@@ -120,9 +120,9 @@ class DownloadBoob(object):
             :param video:
             :rtype : bool
         """
-        if (os.path.isfile(self.get_filename(video)) or
+        if (os.path.isfile(self.get_filename(video).encode('utf8')) or
             os.path.isfile(self.get_filename(video,
-                                             m3u=True))):
+                                             m3u=True).encode('utf8'))):
             logging.info("%s Already downloaded : %s" %
                          (video.id, video.title))
             return True
@@ -134,15 +134,15 @@ class DownloadBoob(object):
         """
             create directory
         """
-        if not os.path.isdir(self.links_directory):
+        if not os.path.isdir(self.links_directory.encode('utf8')):
             logging.debug("  create link directory : %s" % self.links_directory)
-            os.makedirs(self.links_directory)
+            os.makedirs(self.links_directory.encode('utf8'))
         else:
             logging.debug("  existing link directory : %s" % self.links_directory)
         if kodi:
             file_name = os.path.join(self.links_directory, 'tvshow.nfo')
             show_name = self.links_directory.split("/")[-1]
-            if not os.path.isfile(file_name):
+            if not os.path.isfile(file_name.encode('utf8')):
                 logging.debug("  create %s" % file_name)
                 f = codecs.open(file_name, "w", "utf-8")
                 f.write(u"<tvshow>\n")
@@ -275,9 +275,9 @@ class DownloadBoob(object):
         linkname = self.get_linkname(video, m3u=m3u)
         idname = self.get_filename(video, relative=True, m3u=m3u)
         absolute_idname = self.get_filename(video, m3u=m3u)
-        if not os.path.islink(linkname) and os.path.isfile(absolute_idname):
+        if not os.path.islink(linkname.encode('utf8')) and os.path.isfile(absolute_idname.encode('utf8')):
             logging.info("  %s -> %s" % (linkname, idname))
-            os.symlink(idname, linkname)
+            os.symlink(idname.encode('utf8'), linkname.encode('utf8'))
         else:
             logging.debug("  Not generating link for %s" % video.title)
 
@@ -289,9 +289,9 @@ class DownloadBoob(object):
         """
         linkname = self.get_linkname(video, m3u=m3u)
         absolute_idname = self.get_filename(video, m3u=m3u)
-        if not os.path.isfile(linkname) and os.path.isfile(absolute_idname):
+        if not os.path.isfile(linkname.encode('utf8')) and os.path.isfile(absolute_idname.encode('utf8')):
             logging.info("  %s => %s" % (absolute_idname, linkname))
-            os.rename(absolute_idname, linkname)
+            os.rename(absolute_idname.encode('utf8'), linkname.encode('utf8'))
             open(absolute_idname, 'w').close()
         else:
             logging.debug("  Not moving file %s" % linkname)
