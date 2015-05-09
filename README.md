@@ -9,7 +9,7 @@ Purpose
 For each entry in the configuration file, the script :
 - update backends
 - install necessary backends
-- check for new video
+- check for new videos
 - download the new videos
 - Store the video in root_directory/entry_directory/video.name.avi
 
