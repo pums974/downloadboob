@@ -20,7 +20,6 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with weboob. If not, see <http://www.gnu.org/licenses/>.
 
-__author__ = 'Alexandre Poux'
 
 import ConfigParser
 from multiprocessing import Process, Queue, cpu_count
@@ -33,13 +32,14 @@ from downloadboob_downloader import *
 import codecs
 import locale
 
-#if sys.stdout.encoding is None:
+# if sys.stdout.encoding is None:
 #    (lang, enc) = locale.getdefaultlocale()
 #    if enc is not None:
 #        (e, d, sr, sw) = codecs.lookup(enc)
 #        # sw will encode Unicode data to the locale-specific character set.
 #        sys.stdout = sw(sys.stdout)
-## end of hack
+# # end of hack
+__author__ = 'Alexandre Poux'
 
 
 def init_config(configfile):
@@ -53,7 +53,7 @@ def init_config(configfile):
     global backend_directory
     global download_directory
     configfile.read(['/etc/downloadboob.conf',
-                     #os.path.expanduser('~/downloadboob.conf'),
+                     # os.path.expanduser('~/downloadboob.conf'),
                      'downloadboob.conf'])
     try:
         links_directory = os.path.expanduser(
@@ -129,15 +129,26 @@ def read_config(configfile, my_section):
         # Search and download
         logging.info("For backend %s, start search for '%s'" %
                      (backend_name, my_section))
-        downloadboob.download(pattern=pattern, sortby=CapVideo.SEARCH_DATE, max_results=max_result,
-                              title_regexp=title_regexp, id_regexp=id_regexp, pattern_type=pattern_type,
-                              author_regexp=author_regexp, title_exclude=title_exclude)
-        # Repeat, because the SEARCH_RELEVANCE may give better results than SEARCH_DATE
+        downloadboob.download(pattern=pattern,
+                              sortby=CapVideo.SEARCH_DATE,
+                              max_results=max_result,
+                              title_regexp=title_regexp,
+                              id_regexp=id_regexp,
+                              pattern_type=pattern_type,
+                              author_regexp=author_regexp,
+                              title_exclude=title_exclude)
+
+# Repeat, because the SEARCH_RELEVANCE may give better results than SEARCH_DATE
         if pattern_type == "search":  # FIXME (AT LEAST) FOR YOUTUBE
             logging.info("For backend %s, start search-bis for '%s'" %
                          (backend_name, my_section))
-            downloadboob.download(pattern=pattern, max_results=max_result, title_regexp=title_regexp,
-                                  id_regexp=id_regexp, pattern_type=pattern_type, author_regexp=author_regexp,
+            downloadboob.download(pattern=pattern,
+                                  sortby=CapVideo.SEARCH_RELEVANCE,
+                                  max_results=max_result,
+                                  title_regexp=title_regexp,
+                                  id_regexp=id_regexp,
+                                  pattern_type=pattern_type,
+                                  author_regexp=author_regexp,
                                   title_exclude=title_exclude)
         print("For backend %s, end search for '%s'" %
               (backend_name, my_section))
@@ -196,7 +207,7 @@ init_config(config)
 nproc = cpu_count()
 
 if __name__ == '__main__':
-    # Each section of the config file is a Task to be done by one process or an another
+    # Each section of the config file is a Task to be done by one process
     # Build a queue with those tasks
     work_queue = Queue()
     res_queue = Queue()

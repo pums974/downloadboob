@@ -15,7 +15,6 @@ from datetime import datetime, timedelta
 from weboob.capabilities.video import BaseVideo
 from downloadboob_tools_generic import *
 
-
 def check_backend(backend_name):
     """
         Check if the backend is installed, if not try to install it
@@ -43,7 +42,7 @@ def backend_is_installed(backend_name):
         .. todo:: Get rit of Popen and check with python directly
     """
     output, error = Popen(['videoob', "backend", "list"],
-                          stdout=PIPE, stderr=PIPE).communicate()
+                          stdout=PIPE, stderr=PIPE, env=env_utf8).communicate()
     error = error.decode('utf8')
     output = output.decode('utf8')
     if error:
@@ -67,7 +66,7 @@ def backend_is_installable(backend_name):
         .. todo:: Get rit of Popen and check with python directly
     """
     output, error = Popen(["videoob", "backend", "list-modules"],
-                          stdout=PIPE, stderr=PIPE).communicate()
+                          stdout=PIPE, stderr=PIPE, env=env_utf8).communicate()
     error = error.decode('utf8')
     output = output.decode('utf8')
     if error:
@@ -95,7 +94,7 @@ def install_backend(backend_name):
     """
     print('Installing backend %s' % backend_name)
     process = Popen(["videoob", "backend", "add", backend_name],
-                    stdout=PIPE, stderr=PIPE)
+                    stdout=PIPE, stderr=PIPE, env=env_utf8)
     output, error = process.communicate()
     res = process.wait()
     error = error.decode('utf8')
@@ -139,8 +138,12 @@ def videoob_get_info_with_python(backend, video):
         .. todo:: optimize
     """
     try:
-        backend.fill_video(video, ('ext', 'title', 'url', 'duration',
-                                   'author', 'date', 'description'))
+        if backend.name == "arte":
+            backend.fill_arte_video(video, ('ext', 'title', 'url', 'duration',
+                                       'author', 'date', 'description'))
+        else:
+            backend.fill_video(video, ('ext', 'title', 'url', 'duration',
+                                       'author', 'date', 'description'))
     except Exception as e:
         if video.title:
             logging.debug(
@@ -165,7 +168,7 @@ def videoob_get_info_with_subprocess(backend, video):
         .. todo:: optimize
     """
     output, error = Popen(['videoob', "info", "--backend=" + backend.name,
-                           "--", video.id], stdout=PIPE, stderr=PIPE).communicate()
+                           "--", video.id], stdout=PIPE, stderr=PIPE, env=env_utf8).communicate()
     error = error.decode('utf8')
     output = output.decode('utf8')
     if error:
@@ -190,8 +193,12 @@ def videoob_get_info_with_subprocess(backend, video):
                                            minutes=t.minute,
                                            seconds=t.second)
             elif prefix == "date":
-                video.date = datetime.strptime(suffix[0:19],
-                                               "%Y-%m-%d %H:%M:%S")
+                try:
+                    video.date = datetime.strptime(suffix[0:19],
+                                                   "%Y-%m-%d %H:%M:%S")
+                except:
+                    video.date = datetime.strptime(suffix[0:19],
+                                                   "%Y-%m-%d")
 
 
 def videoob_list_rep(rep, backend):
@@ -206,10 +213,16 @@ def videoob_list_rep(rep, backend):
     """
     logging.debug("Listing videos")
     list_id = []
-    list_dir = list(backend.iter_resources((BaseVideo, ), rep.split("/")))
+    if not type(rep) is list:
+        rep = rep.split("/")
+    try:
+        list_dir = list(backend.iter_resources((BaseVideo, ), rep))
+    except:
+        logging.info('Path not found : %s' % '/'.join(rep))
+        return([])
     for elem in list_dir:
         if elem.id:  # It's a video
             list_id.append(elem.id)
         else:        # It's like a directory
-            list_id.append(videoob_list_rep(rep + "/" + elem.title, backend))
+            list_id.append(videoob_list_rep(elem.split_path, backend))
     return sorted(set(list_id))

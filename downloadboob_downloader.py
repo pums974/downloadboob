@@ -17,7 +17,7 @@ from downloadboob_tools_kodi import *
 
 DOWNLOAD_DIRECTORY = ".files"
 links_directory = "Podcasts"
-backend_directory = os.path.expanduser("~/.local/share/weboob/modules/1.0/")
+backend_directory = os.path.expanduser("~/.local/share/weboob/modules/1.1/")
 kodi = True
 down_live = False
 
@@ -323,37 +323,41 @@ class DownloadBoob(object):
 
         # search for videos
         list_videos = self.do_search(pattern, pattern_type, sortby, nsfw)
+        if not list_videos:
+            return
 
         # Filter the list of videos
         videos = self.filter_list(list_videos, title_regexp, id_regexp,
                                   author_regexp, title_exclude, max_results)
+        if not videos:
+            return
+
 
         # download videos
-        if videos:
-            for video in videos:
-                print("Downloading... " + video.title)
-                if kodi:  # THE "TITLE" BECOME "S00E00 - TITLE (ID)"
-                    rewrite_title(video)
-                if down_live:  # CREATE LIVE STREAM
-                    ret = self.write_m3u(video)
-                else:  # DOWNLOAD VIDEO
-                    ret = do_download(video, self.get_filename(video)
-                                      )  # FOR DIRECT LINKS
-                    if not ret:
-                        ret = do_conv(video, self.get_filename(video)
-                                      )  # FOR INDIRECT LINKS
+        for video in videos:
+            print("Downloading... " + video.title)
+            if kodi:  # THE "TITLE" BECOME "S00E00 - TITLE (ID)"
+                rewrite_title(video)
+            if down_live:  # CREATE LIVE STREAM
+                ret = self.write_m3u(video)
+            else:  # DOWNLOAD VIDEO
+                ret = do_download(video, self.get_filename(video)
+                                  )  # FOR DIRECT LINKS
                 if not ret:
-                    if not kodi:
-                        self.set_link(
-                            video
-                        )  # CREATE LINKS FOR A BEAUTIFULL LIBRARY
-                    else:
-                        self.do_mv(video)  # MOVE FILES FOR A BEAUTIFULL LIBRARY
-                        # CREATE NFO FILES FOR KODI
-                        write_nfo(self.get_linkname(video),
-                                  self.links_directory, self.backend_name,
-                                  video)
-                    print("Downloaded : " + video.title)
+                    ret = do_conv(video, self.get_filename(video)
+                                  )  # FOR INDIRECT LINKS
+            if not ret:
+                if not kodi:
+                    self.set_link(
+                        video
+                    )  # CREATE LINKS FOR A BEAUTIFULL LIBRARY
                 else:
-                    assert isinstance(video.title, basestring)
-                    print("Failed download :" + video.title)
+                    self.do_mv(video)  # MOVE FILES FOR A BEAUTIFULL LIBRARY
+                    # CREATE NFO FILES FOR KODI
+                    write_nfo(self.get_linkname(video),
+                              self.links_directory, self.backend_name,
+                              video)
+                print("Downloaded : " + video.title)
+            else:
+                assert isinstance(video.title, basestring)
+                print("Failed download :" + video.title)

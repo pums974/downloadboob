@@ -16,7 +16,7 @@ from subprocess import Popen, CalledProcessError, PIPE
 import logging
 import os
 
-
+env_utf8 = {'PYTHONIOENCODING': 'utf-8'}
 rx = re.compile('[ \\/\\?\\:\\>\\<\\!\\\\\\*]+', re.UNICODE)
 exec_wget = ""
 exec_curl = ""
@@ -102,15 +102,14 @@ def check_link(links_directory, link_name):
         :param links_directory:
         :param link_name:
     """
-    if os.path.islink(link_name.encode('utf8')):
-        file_name = os.readlink(link_name.encode('utf8')).decode('utf8')
-        absolute_file_name = os.path.join(links_directory, file_name)
-        if os.path.isfile(absolute_file_name.encode('utf8')):
-            logging.debug("Link still valid : %s -> %s" % (link_name, absolute_file_name))
-            return True
-        return False
-    else:
+    if not os.path.islink(link_name.encode('utf8')):
         return True
+    file_name = os.readlink(link_name.encode('utf8')).decode('utf8')
+    absolute_file_name = os.path.join(links_directory, file_name)
+    if os.path.isfile(absolute_file_name.encode('utf8')):
+        logging.debug("Link still valid : %s -> %s" % (link_name, absolute_file_name))
+        return True
+    return False
 
 
 def purge(links_directory):
@@ -210,6 +209,7 @@ def init_logging():
     # it's possible to set the level to logging.DEBUG if you want more verbosity
     console = logging.StreamHandler()
     console.setLevel(logging.WARNING)
+#    console.setLevel(logging.DEBUG)
     logformatter = logging.Formatter("%(message)s")
     console.setFormatter(logformatter)
     logging.getLogger('').addHandler(console)
